@@ -9,6 +9,7 @@
 
 #include "StalkerDrone.h"
 
+using namespace cv;
 int hough_edge_thresh = 80;
 int hough_max_edge_thresh = 255;
 int hough_space_resolution = 5;
@@ -26,8 +27,9 @@ int c;
 float max_vel = 0.3;
 int reference_face = 0;
 int mean_face = 0;
+bool show_frame = true;
+IplImage main_window;
 
-using namespace cv;
 
 StalkerDrone::StalkerDrone() {
 	// TODO Auto-generated constructor stub
@@ -283,8 +285,10 @@ geometry_msgs::Twist StalkerDrone::processImg(cv::Mat src){
 				||	angle(Point(winners.at(0).x - winners.at(3).x, winners.at(0).y - winners.at(3).y),
 					Point(winners.at(4).x - winners.at(7).x, winners.at(4).y - winners.at(7).y)) > angle_tolerance)
 		{
-			IplImage* main = new IplImage(src);
-			cvShowImage("Main", main);
+			if(show_frame){
+				main_window = IplImage(src);
+				cvShowImage("Main", &main_window);
+			}
 			return result;
 		}
 
@@ -330,6 +334,8 @@ geometry_msgs::Twist StalkerDrone::processImg(cv::Mat src){
 		c = cvWaitKey(10);
 		if (c==111)// o
 			reference_face = mean_face;
+		if (c==112)//p
+			show_frame = !show_frame;
 
 		// process the new directions for the drone
 		float rect_fraction = (float)rect2_face / (float)rect1_face;
@@ -405,10 +411,12 @@ geometry_msgs::Twist StalkerDrone::processImg(cv::Mat src){
 	}
 
 	/// Showing the result
-	IplImage* main = new IplImage(src);
-    //IplImage* second = new IplImage(detected_edges);
-	cvShowImage("Main", main); // show frame
-   //cvShowImage("Second", second); // show frame
+	if(show_frame){
+		main_window = IplImage(src);
+		//IplImage* second = new IplImage(detected_edges);
+		cvShowImage("Main", &main_window); // show frame
+		//cvShowImage("Second", second); // show frame
+	}
 	return result;
 }
 
@@ -418,8 +426,8 @@ void StalkerDrone::set_velocity(float vel){
 
 void StalkerDrone::init(){
 	cvNamedWindow("Main",0);
-	cv::createTrackbar( "Erosion: ", "Main", &num_erosions, 20);
-	cv::createTrackbar( "Dilation: ", "Main", &num_dilations, 20);
-	cv::createTrackbar( "Angle Tolerance: ", "Main", &angle_tolerance, 90);
+	//cv::createTrackbar( "Erosion: ", "Main", &num_erosions, 20);
+	//cv::createTrackbar( "Dilation: ", "Main", &num_dilations, 20);
+	//cv::createTrackbar( "Angle Tolerance: ", "Main", &angle_tolerance, 90);
 }
 

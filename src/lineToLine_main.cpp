@@ -9,10 +9,22 @@
 #include "std_msgs/String.h"
 #include <image_transport/image_transport.h>
 #include "geometry_msgs/Twist.h"
+#include "std_msgs/Empty.h"
+#include "sensor_msgs/Image.h"
 #include <cv_bridge/cv_bridge.h>
 #include <opencv2/imgproc/imgproc.hpp>
 #include <opencv2/highgui/highgui.hpp>
 #include "LineToLine.h"
+
+class Controller {
+    public:
+        bool data_present;
+        cv::Mat image;
+        void cam_cb(const sensor_msgs::ImageConstPtr& msg) {
+            data_present = true;
+            this->image = cv_bridge::toCvCopy(msg, "bgr8")->image;
+        }
+};
 
 CvCapture* cv_cap;
 int c = 0;
@@ -20,10 +32,10 @@ cv_bridge::CvImagePtr cv_ptr;
 
 using namespace cv;
 
-cv::Mat image;
 int miss_accu = 0;
 int miss_max = 5; // maximum number of unexpected, consecutive tracking results before switching to next step.
 std::vector<std::string> step_msgs;
+std::vector<double> xvel;
 std::vector<bool> expected_tracking;
 
 //Mat rotateImage(const Mat& source, double angle)
@@ -38,14 +50,34 @@ std::vector<bool> expected_tracking;
 
 int main(int argc, char **argv)
 {
+    ros::init(argc, argv, "linetoline");
+    ros::NodeHandle n;
+    ros::Rate loop_rate(10);
+
+    Controller con;
+    con.data_present = false;
+    cv::Mat image;
+
+    ros::Publisher cmd = n.advertise<geometry_msgs::Twist>("cmd_vel", 5);
+    ros::Publisher takeoff = n.advertise<std_msgs::Empty>("/ardrone/takeoff", 5);
+    ros::Publisher landing = n.advertise<std_msgs::Empty>("/ardrone/land", 5);
+    ros::Subscriber cam = n.subscribe("/ardrone/bottom/image_raw", 5, &Controller::cam_cb, &con);
+
 	int step = 0;
 	step_msgs.push_back("Seeing first line. Going forward");
+    xvel.push_back(.1);
 	step_msgs.push_back("Left first line. Going forward");
+    xvel.push_back(.1);
 	step_msgs.push_back("Seeing second line. Going forward");
+    xvel.push_back(.1);
 	step_msgs.push_back("Left second line. Going backward");
+    xvel.push_back(-.1);
 	step_msgs.push_back("Seeing second line again. Going backward");
+    xvel.push_back(-.1);
 	step_msgs.push_back("Left second line again. Going backward");
+    xvel.push_back(-.1);
 	step_msgs.push_back("Seeing first line again. Going backwards");
+    xvel.push_back(-.1);
 	expected_tracking.push_back(true);
 	expected_tracking.push_back(false);
 	expected_tracking.push_back(true);
@@ -53,8 +85,6 @@ int main(int argc, char **argv)
 	expected_tracking.push_back(true);
 	expected_tracking.push_back(false);
 	expected_tracking.push_back(true);
-	ros::init(argc, argv, "LineToLine");
-   // ros::Rate loop_rate(50);
 
 	cv_cap = cvCaptureFromCAM(0);
 	LineToLine* ltl = new LineToLine();
@@ -65,17 +95,30 @@ int main(int argc, char **argv)
 
 	// wait for the user to start
 	printf("Position the drone over the first line and facing to thesecond line, then hit o to go.\n");
+    
+    while(!con.data_present) ros::spinOnce();
+    
 	while(true){
-		image = cvQueryFrame(cv_cap);
+        ros::spinOnce();
+        image = con.image;
 		ltl->processImg(image);
 		c = cvWaitKey(10); // wait 10 ms or for key stroke
 		if(c == 111)
 			break; // if ESC, break and quit
 	}
 
+    geometry_msgs::Twist twist;
+    twist.linear.x = 0;
+    twist.linear.y = 0;
+    twist.linear.z = 0;
+    twist.angular.x = 0;
+    twist.angular.y = 0;
+    twist.angular.z = 0;
+
 	// drone has to be positioned over first line and must be detecting the line for this to work
 	while(true){
-		image = cvQueryFrame(cv_cap);
+        ros::spinOnce();
+        image = con.image;
 		if(expected_tracking.at(step) != ltl->processImg(image)){
 			miss_accu++;
 			if(miss_accu == miss_max)
@@ -86,12 +129,17 @@ int main(int argc, char **argv)
 				break;
 		std::cout << string( 50, '\n' );
 		printf("Step %i. \n%s.\n", step, step_msgs.at(step).c_str());
+        twist.linear.x = xvel.at(step);
+        cmd.publish(twist);
 		c = cvWaitKey(10); // wait 10 ms or for key stroke
 		if(c == 27)
 			break; // if ESC, break and quit
 	}
 	std::cout << string( 50, '\n' );
 	printf("Crossed first line. Stopping and landing.\nPress key to end.\n");
+    twist.linear.x = 0;
+    std_msgs::Empty empty;
+    landing.publish(empty);
 	cvWaitKey();
 
 //	double angle = 5;

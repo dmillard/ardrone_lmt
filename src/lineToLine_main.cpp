@@ -64,6 +64,8 @@ int main(int argc, char **argv)
     ros::Subscriber cam = n.subscribe("/ardrone/bottom/image_raw", 5, &Controller::cam_cb, &con);
 
 	int step = 0;
+	step_msgs.push_back("Seeing no line. Going forward");
+    xvel.push_back(.1);
 	step_msgs.push_back("Seeing first line. Going forward");
     xvel.push_back(.1);
 	step_msgs.push_back("Left first line. Going forward");
@@ -78,6 +80,7 @@ int main(int argc, char **argv)
     xvel.push_back(-.1);
 	step_msgs.push_back("Seeing first line again. Going backwards");
     xvel.push_back(-.1);
+	expected_tracking.push_back(false);
 	expected_tracking.push_back(true);
 	expected_tracking.push_back(false);
 	expected_tracking.push_back(true);
